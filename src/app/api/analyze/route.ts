@@ -29,27 +29,23 @@ async function getYtDlpPath(): Promise<string> {
   if (process.env.YT_DLP_PATH && existsSync(process.env.YT_DLP_PATH)) {
     return process.env.YT_DLP_PATH;
   }
-  // 2) Download yt-dlp binary to /tmp for serverless
+  // 2) Download standalone yt-dlp binary to /tmp for serverless
   const binPath = join(tmpdir(), 'yt-dlp');
   if (existsSync(binPath)) return binPath;
 
-  const YtDlpWrap = (await import('yt-dlp-wrap')).default;
-  const releaseUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
-  // On macOS (local), use different binary
+  // Must use standalone binary (not Python script) for Vercel (no python3)
   const isLinux = process.platform === 'linux';
   const downloadUrl = isLinux
-    ? releaseUrl
+    ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux'
     : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos';
 
-  try {
-    await YtDlpWrap.downloadFromGithub(binPath);
-  } catch {
-    // Manual download fallback
-    const res = await fetch(downloadUrl);
-    const buf = Buffer.from(await res.arrayBuffer());
-    await writeFile(binPath, buf);
-  }
+  console.log(`Downloading yt-dlp standalone binary for ${process.platform}...`);
+  const res = await fetch(downloadUrl, { redirect: 'follow' });
+  if (!res.ok) throw new Error(`Failed to download yt-dlp: ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  await writeFile(binPath, buf);
   await chmod(binPath, 0o755);
+  console.log(`yt-dlp downloaded to ${binPath} (${buf.length} bytes)`);
   return binPath;
 }
 
