@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import Groq from 'groq-sdk';
 
-export const maxDuration = 120;
+export const maxDuration = 60; // Vercel Hobby(무료) 최대값
 
 const execFileAsync = promisify(execFile);
 
@@ -62,31 +62,43 @@ export async function POST(request: NextRequest) {
 
   const tmpDir = tmpdir();
   const ts = Date.now();
-  const videoPath = join(tmpDir, `reel_${ts}.mp4`);
   const audioPath = join(tmpDir, `reel_${ts}.mp3`);
 
   try {
     const [ytdlp, ffmpeg] = await Promise.all([getYtDlpPath(), getFfmpegPath()]);
 
-    // 1. Download video with yt-dlp
+    // 1. Download audio only with yt-dlp (skip video = much faster)
     await execFileAsync(ytdlp, [
-      '-f', 'best[ext=mp4]/best',
-      '-o', videoPath,
+      '-f', 'worstaudio/worst',
+      '-x', '--audio-format', 'mp3',
+      '--audio-quality', '9',
+      '-o', audioPath.replace('.mp3', '.%(ext)s'),
       '--no-playlist',
-      '--max-filesize', '50m',
+      '--max-filesize', '20m',
+      '--ffmpeg-location', ffmpeg,
+      '--socket-timeout', '15',
       url,
-    ], { timeout: 60000 });
-
-    // 2. Extract audio with ffmpeg
-    await execFileAsync(ffmpeg, [
-      '-i', videoPath,
-      '-vn',
-      '-acodec', 'libmp3lame',
-      '-ab', '64k',
-      '-ar', '16000',
-      '-y',
-      audioPath,
     ], { timeout: 30000 });
+
+    // 2. If yt-dlp extracted to different ext, convert with ffmpeg
+    const possibleExts = ['.mp3', '.m4a', '.webm', '.opus', '.ogg'];
+    let actualAudioPath = audioPath;
+    for (const ext of possibleExts) {
+      const p = audioPath.replace('.mp3', ext);
+      if (existsSync(p)) { actualAudioPath = p; break; }
+    }
+
+    if (actualAudioPath !== audioPath) {
+      await execFileAsync(ffmpeg, [
+        '-i', actualAudioPath,
+        '-acodec', 'libmp3lame',
+        '-ab', '64k',
+        '-ar', '16000',
+        '-y',
+        audioPath,
+      ], { timeout: 15000 });
+      await unlink(actualAudioPath).catch(() => {});
+    }
 
     // 3. Transcribe with Groq Whisper
     const groq = new Groq({ apiKey });
@@ -143,7 +155,7 @@ export async function POST(request: NextRequest) {
     const analysisResult = JSON.parse(analysis.choices[0].message.content || '{}');
 
     // Cleanup
-    await Promise.all([unlink(videoPath).catch(() => {}), unlink(audioPath).catch(() => {})]);
+    await unlink(audioPath).catch(() => {});
 
     return NextResponse.json({
       script: fullScript,
@@ -153,7 +165,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    await Promise.all([unlink(videoPath).catch(() => {}), unlink(audioPath).catch(() => {})]);
+    await unlink(audioPath).catch(() => {});
     console.error('Analysis error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `분석 실패: ${message}` }, { status: 500 });
