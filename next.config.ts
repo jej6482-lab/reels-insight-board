@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ['ffmpeg-static', 'yt-dlp-wrap'],
 };
 
 export default nextConfig;
