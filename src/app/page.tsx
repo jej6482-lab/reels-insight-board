@@ -107,6 +107,36 @@ export default function Home() {
         )}
       </main>
 
+      {/* Footer */}
+      <footer className="border-t border-gray-100 mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex items-center justify-center gap-2">
+          <span className="text-xs text-gray-400">Made by</span>
+          <a
+            href="https://www.instagram.com/eroon_design/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <defs>
+                <linearGradient id="ig-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#FD5" />
+                  <stop offset="25%" stopColor="#FF543E" />
+                  <stop offset="50%" stopColor="#C837AB" />
+                  <stop offset="100%" stopColor="#5B51D8" />
+                </linearGradient>
+              </defs>
+              <rect x="2" y="2" width="20" height="20" rx="5" stroke="url(#ig-grad)" strokeWidth="2" />
+              <circle cx="12" cy="12" r="5" stroke="url(#ig-grad)" strokeWidth="2" />
+              <circle cx="17.5" cy="6.5" r="1.5" fill="url(#ig-grad)" />
+            </svg>
+            <span className="text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">
+              @eroon_design
+            </span>
+          </a>
+        </div>
+      </footer>
+
       {viewingReel && (
         <ReelDetail
           reel={viewingReel}
