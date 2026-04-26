@@ -8,7 +8,7 @@ interface AnalyzerViewProps {
   onCancel: () => void;
 }
 
-type Step = 'input' | 'analyzing' | 'result' | 'generating' | 'plan';
+type Step = 'input' | 'analyzing' | 'manual' | 'manual-analyzing' | 'result' | 'generating' | 'plan';
 
 export default function AnalyzerView({ onSave, onCancel }: AnalyzerViewProps) {
   const [step, setStep] = useState<Step>('input');
@@ -17,6 +17,7 @@ export default function AnalyzerView({ onSave, onCancel }: AnalyzerViewProps) {
   const [timestampedScript, setTimestampedScript] = useState('');
   const [analysis, setAnalysis] = useState<ReelAnalysis | null>(null);
   const [error, setError] = useState('');
+  const [manualScript, setManualScript] = useState('');
 
   // 기획 생성
   const [myTopic, setMyTopic] = useState('');
@@ -49,7 +50,31 @@ export default function AnalyzerView({ onSave, onCancel }: AnalyzerViewProps) {
       setStep('result');
     } catch (err) {
       setError(err instanceof Error ? err.message : '분석에 실패했습니다');
-      setStep('input');
+      setStep('manual');
+    }
+  };
+
+  const handleManualAnalyze = async () => {
+    if (!manualScript.trim()) return;
+    setError('');
+    setStep('manual-analyzing');
+
+    try {
+      const res = await fetch('/api/analyze-script', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: manualScript }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setScript(data.script);
+      setTimestampedScript(data.timestampedScript);
+      setAnalysis(data.analysis);
+      setStep('result');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '분석에 실패했습니다');
+      setStep('manual');
     }
   };
 
@@ -103,13 +128,16 @@ export default function AnalyzerView({ onSave, onCancel }: AnalyzerViewProps) {
       {/* Step indicator */}
       <div className="flex items-center gap-2 text-xs">
         {[
-          { key: 'input', label: 'URL 입력' },
+          { key: 'input', label: '스크립트 입력' },
           { key: 'result', label: 'AI 분석' },
           { key: 'plan', label: '기획 생성' },
         ].map((s, i) => {
-          const isActive = s.key === step || s.key === 'result' && step === 'analyzing' || s.key === 'plan' && step === 'generating';
+          const isActive =
+            (s.key === 'input' && (step === 'input' || step === 'manual' || step === 'analyzing' || step === 'manual-analyzing')) ||
+            (s.key === 'result' && (step === 'result')) ||
+            (s.key === 'plan' && (step === 'generating' || step === 'plan'));
           const isDone =
-            (s.key === 'input' && step !== 'input') ||
+            (s.key === 'input' && (step === 'result' || step === 'generating' || step === 'plan')) ||
             (s.key === 'result' && (step === 'plan' || step === 'generating'));
           return (
             <div key={s.key} className="flex items-center gap-2">
@@ -191,6 +219,84 @@ export default function AnalyzerView({ onSave, onCancel }: AnalyzerViewProps) {
             <p>4. 후킹 방식 분석 중...</p>
           </div>
           <p className="text-xs text-gray-300 mt-4">30초~1분 정도 소요됩니다</p>
+        </div>
+      )}
+
+      {/* STEP: Manual Script Input (fallback) */}
+      {step === 'manual' && (
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 p-8">
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-orange-100 flex items-center justify-center mx-auto mb-3">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-gray-900">스크립트를 직접 입력해주세요</h2>
+            <p className="text-sm text-gray-400 mt-1">
+              자동 추출이 실패했습니다. 릴스를 보면서 대사를 직접 입력하면<br />
+              AI가 동일하게 분석해드립니다.
+            </p>
+          </div>
+
+          {url && (
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 mb-4 px-4 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 transition-colors">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              <span className="text-sm font-medium text-purple-600">릴스 보면서 대사 따기</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
+          )}
+
+          <div className="space-y-4">
+            <textarea
+              value={manualScript}
+              onChange={(e) => setManualScript(e.target.value)}
+              placeholder={"릴스에서 말하는 내용을 그대로 적어주세요.\n\n예시:\n이거 아직도 모르면 진짜 손해예요.\n원래는 그냥 평범한 사진이었는데 이걸 바꿨더니 반응이 완전 달라졌거든요.\n지금부터 알려드릴게요..."}
+              rows={8}
+              className="w-full px-4 py-4 rounded-2xl border border-gray-200 text-sm text-gray-900 placeholder:text-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 bg-gray-50/50 resize-none leading-relaxed"
+            />
+
+            {error && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-100">
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleManualAnalyze}
+                disabled={!manualScript.trim()}
+                className="flex-1 py-4 rounded-2xl text-base font-bold text-white bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 shadow-lg shadow-orange-200 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                이 스크립트로 분석하기
+              </button>
+              <button
+                onClick={() => { setStep('input'); setError(''); }}
+                className="px-5 py-4 rounded-2xl text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                뒤로
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STEP: Manual Analyzing */}
+      {step === 'manual-analyzing' && (
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-100/50 p-12 text-center">
+          <div className="w-16 h-16 rounded-full border-4 border-orange-100 border-t-orange-500 animate-spin mx-auto mb-6" />
+          <h3 className="text-lg font-bold text-gray-900 mb-2">스크립트를 분석하고 있습니다</h3>
+          <p className="text-sm text-gray-400">후킹 방식, 전개 구조, 감정 흐름을 파악 중...</p>
+          <p className="text-xs text-gray-300 mt-4">5~10초 정도 소요됩니다</p>
         </div>
       )}
 
